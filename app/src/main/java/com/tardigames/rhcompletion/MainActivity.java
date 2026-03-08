@@ -2,12 +2,16 @@ package com.tardigames.rhcompletion;
 
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.hardware.display.DisplayManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.view.View;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.SeekBar;
+import android.widget.Spinner;
 import android.widget.TextView;
 
 import androidx.activity.EdgeToEdge;
@@ -22,6 +26,7 @@ public class MainActivity extends AppCompatActivity {
     private EditText m_editText_nickname;
     private TextView m_textView_width;
     private SeekBar m_seekBar_width;
+    private Spinner m_spinner_screen;
     private Button m_button_ok;
 
     @Override
@@ -40,6 +45,7 @@ public class MainActivity extends AppCompatActivity {
         m_editText_nickname = findViewById(R.id.editText_Nickname);
         m_textView_width = findViewById(R.id.textView_width);
         m_seekBar_width = findViewById(R.id.seekBar_width);
+        m_spinner_screen = findViewById(R.id.spinner_screen);
         m_button_ok = findViewById(R.id.button_OK);
 
         // Configure nickname widget
@@ -51,31 +57,42 @@ public class MainActivity extends AppCompatActivity {
         m_seekBar_width.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                // Called when the progress is changed
-                // Update Width text
                 if (m_seekBar_width.getProgress() < 30)
                     m_seekBar_width.setProgress(30);
                 m_textView_width.setText(String.format(getString(R.string.textView_width), m_seekBar_width.getProgress()));
             }
             @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-                // Called when the user starts moving the thumb
-            }
+            public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-                // Called when the user stops moving the thumb
-            }
+            public void onStopTrackingTouch(SeekBar seekBar) {}
         });
+
+        // Configure screen spinner — only show on multi-display devices
+        DisplayManager displayManager = (DisplayManager) getSystemService(DISPLAY_SERVICE);
+        if (displayManager.getDisplays().length > 1) {
+            // Order must match Options.SCREEN_PRIMARY=0, Options.SCREEN_SECONDARY=1
+            ArrayAdapter<CharSequence> screenAdapter = ArrayAdapter.createFromResource(
+                    this, R.array.screen_options, android.R.layout.simple_spinner_item);
+            screenAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+            m_spinner_screen.setAdapter(screenAdapter);
+            m_spinner_screen.setSelection(Options.getPreferredScreen());
+        } else {
+            // Single-display device: hide the screen selector entirely
+            findViewById(R.id.textView_screen_label).setVisibility(View.GONE);
+            m_spinner_screen.setVisibility(View.GONE);
+            // Force primary so the fallback in FloatingWindow is always correct
+            Options.setPreferredScreen(Options.SCREEN_PRIMARY);
+        }
 
         // Configure OK button
         m_button_ok.setOnClickListener(v -> {
-            // Save nickname in options
             Options.setNickname(String.valueOf(m_editText_nickname.getText()));
-            // Save width in options
             Options.setWidth(m_seekBar_width.getProgress());
-            // Set autostart in options
+            // Only save screen preference if the spinner is visible
+            if (m_spinner_screen.getVisibility() == View.VISIBLE) {
+                Options.setPreferredScreen(m_spinner_screen.getSelectedItemPosition());
+            }
             Options.setAutostart(true);
-            // Start
             checkStart();
         });
 
@@ -85,7 +102,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // Request permission if necessary
-        if (! Settings.canDrawOverlays(this)) {
+        if (!Settings.canDrawOverlays(this)) {
             requestAppearOnTopPermission();
         }
 
@@ -98,7 +115,6 @@ public class MainActivity extends AppCompatActivity {
     // Start the floating window service if possible
     private void checkStart() {
         if (Settings.canDrawOverlays(this)) {
-            // Start service and stop main activity
             startService(new Intent(MainActivity.this, FloatingWindow.class));
             finish();
         } else {
@@ -108,7 +124,6 @@ public class MainActivity extends AppCompatActivity {
 
     // Request 'Appear on top' permission
     private void requestAppearOnTopPermission() {
-        // Display 'Permission needed' message
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("Permission Needed");
         builder.setMessage("Please enable 'Appear on top' from System Settings.");
